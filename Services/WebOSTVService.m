@@ -35,7 +35,7 @@
 #define kKeyboardEnter @"\x1b ENTER \x1b"
 #define kKeyboardDelete @"\x1b DELETE \x1b"
 
-@interface WebOSTVService () <UIAlertViewDelegate, WebOSTVServiceSocketClientDelegate, RemoteCameraServiceDelegate, ScreenMirroringServiceDelegate>
+@interface WebOSTVService () <WebOSTVServiceSocketClientDelegate, RemoteCameraServiceDelegate, ScreenMirroringServiceDelegate>
 {
     NSArray *_permissions;
 
@@ -43,13 +43,13 @@
     NSMutableDictionary *_appToAppIdMappings;
 
     NSTimer *_pairingTimer;
-    UIAlertView *_pairingAlert;
+    UIAlertController *_pairingAlert;
 
     NSMutableArray *_keyboardQueue;
     BOOL _keyboardQueueProcessing;
 
     BOOL _mouseInit;
-    UIAlertView *_pinAlertView;
+    UIAlertController *_pinAlertView;
     
     __weak id<RemoteCameraControlDelegate> _remoteCameraDelegate;
     __weak id<ScreenMirroringControlDelegate> _screenMirroringDelegate;
@@ -328,49 +328,78 @@
 
 #pragma mark - Paring alert
 
--(void) showAlert
-{
+- (void)showAlert {
     NSString *title = [[NSBundle mainBundle] localizedStringForKey:@"Connect_SDK_Pair_Title" value:@"Pairing with device" table:@"ConnectSDK"];
     NSString *message = [[NSBundle mainBundle] localizedStringForKey:@"Connect_SDK_Pair_Request" value:@"Please confirm the connection on your device" table:@"ConnectSDK"];
     NSString *ok = [[NSBundle mainBundle] localizedStringForKey:@"Connect_SDK_Pair_OK" value:@"OK" table:@"ConnectSDK"];
     NSString *cancel = [[NSBundle mainBundle] localizedStringForKey:@"Connect_SDK_Pair_Cancel" value:@"Cancel" table:@"ConnectSDK"];
     
-    _pairingAlert = [[UIAlertView alloc] initWithTitle:title message:message delegate:self cancelButtonTitle:cancel otherButtonTitles:ok, nil];
-    if(self.pairingType == DeviceServicePairingTypePinCode || self.pairingType == DeviceServicePairingTypeMixed){
-        _pairingAlert.alertViewStyle = UIAlertViewStylePlainTextInput;
-        _pairingAlert.message = [[NSBundle mainBundle] localizedStringForKey:@"Connect_SDK_Pair_Request_Pin" value:@"Please enter the pin code" table:@"ConnectSDK"];
+    UIAlertController *alertController = [UIAlertController alertControllerWithTitle:title message:message preferredStyle:UIAlertControllerStyleAlert];
+    
+    if (self.pairingType == DeviceServicePairingTypePinCode || self.pairingType == DeviceServicePairingTypeMixed) {
+        [alertController addTextFieldWithConfigurationHandler:^(UITextField * _Nonnull textField) {
+            textField.placeholder = [[NSBundle mainBundle] localizedStringForKey:@"Connect_SDK_Pair_Request_Pin" value:@"Please enter the pin code" table:@"ConnectSDK"];
+        }];
     }
-    dispatch_on_main(^{ [_pairingAlert show]; });
+    
+    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:cancel style:UIAlertActionStyleCancel handler:^(UIAlertAction * _Nonnull action) {
+        [self disconnect];
+    }];
+    [alertController addAction:cancelAction];
+    
+    UIAlertAction *okAction = [UIAlertAction actionWithTitle:ok style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        NSString *inputText = @"";
+        if (self.pairingType == DeviceServicePairingTypePinCode || self.pairingType == DeviceServicePairingTypeMixed) {
+            UITextField *textField = alertController.textFields.firstObject;
+            inputText = textField.text ?: @"";
+        }
+        
+        [self handleOkActionWithInputText:inputText];
+    }];
+    [alertController addAction:okAction];
+    
+    _pairingAlert = alertController;
+    
+    UIViewController *topViewController = [self topViewController];
+    [topViewController presentViewController:alertController animated:YES completion:nil];
 }
 
--(void)alertView:(UIAlertView *)alertView didDismissWithButtonIndex:(NSInteger)buttonIndex
-{
-    if(alertView == _pairingAlert){
-        if (buttonIndex == 0){
-            [self disconnect];
-        }else
-            if((self.pairingType == DeviceServicePairingTypePinCode || self.pairingType == DeviceServicePairingTypeMixed) && buttonIndex == 1){
-                NSString *pairingCode = [alertView textFieldAtIndex:0].text;
-                [self sendPairingKey:pairingCode success:nil failure:nil];
-            }
+- (UIViewController *)topViewController {
+    UIViewController *topViewController = [UIApplication sharedApplication].keyWindow.rootViewController;
+    while (topViewController.presentedViewController) {
+        topViewController = topViewController.presentedViewController;
     }
+    return topViewController;
 }
 
--(void) showAlertWithTitle:(NSString *)title andMessage:(NSString *)message
-{
+- (void)handleOkActionWithInputText:(NSString *)inputText {
+    // Handle the OK action here
+    if((self.pairingType == DeviceServicePairingTypePinCode || self.pairingType == DeviceServicePairingTypeMixed)){
+        NSString *pairingCode = inputText;
+        
+        [self sendPairingKey:pairingCode success:nil failure:nil];
+    }
+    // Dismiss the alert controller
+   //  [self dismissViewControllerAnimated:YES completion:nil];
+}
+
+- (void)showAlertWithTitle:(NSString *)title andMessage:(NSString *)message {
     NSString *alertTitle = [[NSBundle mainBundle] localizedStringForKey:@"Connect_SDK_Pair_Title" value:title table:@"ConnectSDK"];
     NSString *alertMessage = [[NSBundle mainBundle] localizedStringForKey:@"Connect_SDK_Pair_Request" value:message table:@"ConnectSDK"];
     NSString *ok = [[NSBundle mainBundle] localizedStringForKey:@"Connect_SDK_Pair_OK" value:@"OK" table:@"ConnectSDK"];
-    if(!_pinAlertView){
-        _pinAlertView = [[UIAlertView alloc] initWithTitle:alertTitle message:alertMessage delegate:self cancelButtonTitle:nil otherButtonTitles:ok, nil];
-    }
-    dispatch_on_main(^{ [_pinAlertView show]; });
+    
+    UIAlertController *alertController = [UIAlertController alertControllerWithTitle:alertTitle message:alertMessage preferredStyle:UIAlertControllerStyleAlert];
+    UIAlertAction *okAction = [UIAlertAction actionWithTitle:ok style:UIAlertActionStyleDefault handler:nil];
+    [alertController addAction:okAction];
+    
+    _pairingAlert = alertController;
+    
+    UIViewController *topViewController = [self topViewController];
+    [topViewController presentViewController:alertController animated:YES completion:nil];
 }
 
 -(void)dismissPinAlertView{
-    if (_pinAlertView && _pinAlertView.isVisible){
-        [_pinAlertView dismissWithClickedButtonIndex:0 animated:NO];
-    }
+    [_pairingAlert dismissViewControllerAnimated:YES completion:nil];
 }
 
 #pragma mark - WebOSTVServiceSocketClientDelegate
@@ -382,8 +411,8 @@
 
 - (void) socket:(WebOSTVServiceSocketClient *)socket registrationFailed:(NSError *)error
 {
-    if (_pairingAlert && _pairingAlert.isVisible)
-        dispatch_on_main(^{ [_pairingAlert dismissWithClickedButtonIndex:0 animated:NO]; });
+    if (_pairingAlert)
+        dispatch_on_main(^{ [_pairingAlert dismissViewControllerAnimated:YES completion:nil]; });
 
     if (self.delegate && [self.delegate respondsToSelector:@selector(deviceService:pairingFailedWithError:)])
         dispatch_on_main(^{ [self.delegate deviceService:self pairingFailedWithError:error]; });
@@ -395,8 +424,8 @@
 {
     [_pairingTimer invalidate];
 
-    if (_pairingAlert && _pairingAlert.visible)
-        dispatch_on_main(^{ [_pairingAlert dismissWithClickedButtonIndex:1 animated:YES]; });
+    if (_pairingAlert)
+        dispatch_on_main(^{ [_pairingAlert dismissViewControllerAnimated:YES completion:nil]; });
 
     if ([self.delegate respondsToSelector:@selector(deviceServicePairingSuccess:)])
         dispatch_on_main(^{ [self.delegate deviceServicePairingSuccess:self]; });
@@ -407,8 +436,8 @@
 
 - (void) socket:(WebOSTVServiceSocketClient *)socket didFailWithError:(NSError *)error
 {
-    if (_pairingAlert && _pairingAlert.visible)
-        dispatch_on_main(^{ [_pairingAlert dismissWithClickedButtonIndex:0 animated:YES]; });
+    if (_pairingAlert)
+        dispatch_on_main(^{ [_pairingAlert dismissViewControllerAnimated:YES completion:nil]; });
 
     if ([self.delegate respondsToSelector:@selector(deviceService:didFailConnectWithError:)])
         dispatch_on_main(^{ [self.delegate deviceService:self didFailConnectWithError:error]; });
