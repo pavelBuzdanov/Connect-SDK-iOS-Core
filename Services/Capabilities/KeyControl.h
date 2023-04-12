@@ -55,6 +55,10 @@
 - (void) okWithSuccess:(SuccessBlock)success failure:(FailureBlock)failure;
 - (void) backWithSuccess:(SuccessBlock)success failure:(FailureBlock)failure;
 - (void) homeWithSuccess:(SuccessBlock)success failure:(FailureBlock)failure;
+- (void) exitWithSuccess:(SuccessBlock)success failure:(FailureBlock)failure;
+- (void) menuWithSuccess:(SuccessBlock)success failure:(FailureBlock)failure;
+- (void) infoWithSuccess:(SuccessBlock)success failure:(FailureBlock)failure;
+- (void) enterWithSuccess:(SuccessBlock)success failure:(FailureBlock)failure;
 
 - (void) sendKeyCode:(NSUInteger)keyCode success:(SuccessBlock)success failure:(FailureBlock)failure;
 

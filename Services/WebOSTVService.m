@@ -1575,6 +1575,19 @@
     [self sendMouseButton:WebOSTVMouseButtonHome success:success failure:failure];
 }
 
+- (void) exitWithSuccess:(SuccessBlock)success failure:(FailureBlock)failure {
+    [self sendMouseButton:WebOSTVMouseButtonExit success:success failure:failure];
+}
+- (void) menuWithSuccess:(SuccessBlock)success failure:(FailureBlock)failure {
+    [self sendMouseButton:WebOSTVMouseButtonMenu success:success failure:failure];
+}
+- (void) infoWithSuccess:(SuccessBlock)success failure:(FailureBlock)failure {
+    [self sendMouseButton:WebOSTVMouseButtonInfo success:success failure:failure];
+}
+- (void) enterWithSuccess:(SuccessBlock)success failure:(FailureBlock)failure {
+    [self sendMouseButton:WebOSTVMouseButtonEnter success:success failure:failure];
+}
+
 - (void)sendKeyCode:(NSUInteger)keyCode success:(SuccessBlock)success failure:(FailureBlock)failure
 {
     [self sendNotSupportedFailure:failure];
