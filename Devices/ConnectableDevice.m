@@ -455,7 +455,7 @@
         else
         {
             if (pairingType == DeviceServicePairingTypeAirPlayMirroring)
-                [(UIAlertView *)pairingData show];
+               // [(UIAlertView *)pairingData show];
         }
     }
 }
