@@ -446,6 +446,14 @@
      }];
 }
 
+- (UIViewController *)topViewController {
+    UIViewController *topViewController = [UIApplication sharedApplication].keyWindow.rootViewController;
+    while (topViewController.presentedViewController) {
+        topViewController = topViewController.presentedViewController;
+    }
+    return topViewController;
+}
+
 - (void)deviceService:(DeviceService *)service pairingRequiredOfType:(DeviceServicePairingType)pairingType withData:(id)pairingData
 {
     if (self.delegate)
@@ -454,8 +462,12 @@
             dispatch_on_main(^{ [self.delegate connectableDevice:self service:service pairingRequiredOfType:pairingType withData:pairingData]; });
         else
         {
-            // if (pairingType == DeviceServicePairingTypeAirPlayMirroring)
-               // [(UIAlertView *)pairingData show];
+            if (pairingType == DeviceServicePairingTypeAirPlayMirroring) {
+                UIAlertController* controller = (UIAlertController *) pairingData;
+                if (controller != nil) {
+                    [[self topViewController] presentViewController:controller animated:NO completion:nil];
+                }
+            }
         }
     }
 }
