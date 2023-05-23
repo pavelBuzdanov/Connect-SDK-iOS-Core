@@ -124,9 +124,8 @@
             dispatch_on_main(^{ [self.service.delegate deviceService:self.service pairingRequiredOfType:DeviceServicePairingTypeAirPlayMirroring withData:_connectingAlertView]; });
         }
         
-        UIViewController *topViewController = [self topViewController];
-
-        [topViewController presentViewController:_connectingAlertView animated:YES completion:nil];
+//         UIViewController *topViewController = [self topViewController];
+//         [topViewController presentViewController:_connectingAlertView animated:YES completion:nil];
     }
 }
 
