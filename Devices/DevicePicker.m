@@ -190,7 +190,7 @@
     [mainWindow.rootViewController presentViewController:_navigationController animated:self.shouldAnimatePicker completion:nil];
 }
 
-- (void) dismissPicker:(id)sender
+- (void) dismissPicker:(id)sender completion: (void (^ __nullable)(void))completion
 {
     if (_actionSheet)
     {
@@ -200,7 +200,7 @@
         if ([UIDevice currentDevice].userInterfaceIdiom == UIUserInterfaceIdiomPad)
             [_popover dismissPopoverAnimated:_shouldAnimatePicker];
         else
-            [_navigationController dismissViewControllerAnimated:_shouldAnimatePicker completion:nil];
+            [_navigationController dismissViewControllerAnimated:_shouldAnimatePicker  completion:completion];
     }
 
     [self cleanupViews];
@@ -336,7 +336,7 @@
 
 - (void)actionSheetCancel:(UIActionSheet *)actionSheet
 {
-    [self dismissPicker:nil];
+    [self dismissPicker:nil completion:nil];
 }
 
 #pragma mark UITableViewDelegate methods
@@ -358,14 +358,15 @@
             return;
     }
     
-    if (_delegate && [_delegate respondsToSelector:@selector(devicePicker:didSelectDevice:)])
-    {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            [_delegate devicePicker:self didSelectDevice:device];
-        });
-    }
+    [self dismissPicker:self  completion: ^{
+        if (_delegate && [_delegate respondsToSelector:@selector(devicePicker:didSelectDevice:)])
+        {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [_delegate devicePicker:self didSelectDevice:device];
+            });
+        }
+    }];
 
-    [self dismissPicker:self];
 }
 
 #pragma mark UITableViewDataSource methods
