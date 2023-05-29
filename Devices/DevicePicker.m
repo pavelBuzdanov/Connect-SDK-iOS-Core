@@ -52,6 +52,7 @@
         _devices = [[NSMutableDictionary alloc] init];
 
         self.shouldAnimatePicker = YES;
+        self.onlyDrmSupported = NO;
     }
 
     return self;
@@ -254,7 +255,14 @@
 
         @synchronized (_generatedDeviceList)
         {
-            _generatedDeviceList = [devices sortedArrayUsingComparator:^NSComparisonResult(ConnectableDevice *device1, ConnectableDevice *device2) {
+                    NSArray <NSString *> *supportedSerivces;
+            if (_onlyDrmSupported) {
+                supportedSerivces = @[@"None"];
+            } else {
+                supportedSerivces = @[@"Chromecast"];
+            }
+            NSPredicate *filter = [NSPredicate predicateWithFormat: @"connectedServiceNames IN %@", supportedSerivces];
+            _generatedDeviceList = [[devices filteredArrayUsingPredicate: filter] sortedArrayUsingComparator:^NSComparisonResult(ConnectableDevice *device1, ConnectableDevice *device2) {
                 NSString *device1Name = [[self nameForDevice:device1] lowercaseString];
                 NSString *device2Name = [[self nameForDevice:device2] lowercaseString];
 
