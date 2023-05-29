@@ -190,6 +190,11 @@
     [mainWindow.rootViewController presentViewController:_navigationController animated:self.shouldAnimatePicker completion:nil];
 }
 
+- (void) dismissPicker:(id)sender
+{
+    [self dismissPicker:nil completion:nil];
+}
+
 - (void) dismissPicker:(id)sender completion: (void (^ __nullable)(void))completion
 {
     if (_actionSheet)
