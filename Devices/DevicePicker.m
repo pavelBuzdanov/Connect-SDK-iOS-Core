@@ -359,8 +359,11 @@
     
     if (self.currentDevice)
     {
-        if ([self.currentDevice.serviceDescription.address isEqualToString:device.serviceDescription.address])
+        if ([self.currentDevice.serviceDescription.address isEqualToString:device.serviceDescription.address]) {
+            [self.currentDevice disconnect];
+            [self setCurrentDevice: nil];
             return;
+        }
     }
     
     [self dismissPicker:self  completion: ^{
@@ -431,6 +434,8 @@ static NSString *cellIdentifier = @"connectPickerCell";
                 [cell setAccessoryType:UITableViewCellAccessoryCheckmark];
             else
                 [cell setAccessoryType:UITableViewCellAccessoryNone];
+        } else {
+            [cell setAccessoryType:UITableViewCellAccessoryNone];
         }
 
     return cell;
