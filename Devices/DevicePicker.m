@@ -155,6 +155,7 @@
         _actionSheetDeviceList = [_generatedDeviceList copy];
     }
 
+    [_actionSheet addButtonWithTitle: @"AirPlay"];
     [_actionSheetDeviceList enumerateObjectsUsingBlock:^(ConnectableDevice *device, NSUInteger idx, BOOL *stop)
     {
         [_actionSheet addButtonWithTitle:device.friendlyName];
@@ -203,10 +204,12 @@
         [_actionSheet dismissWithClickedButtonIndex:_actionSheet.cancelButtonIndex animated:YES];
     } else
     {
-        if ([UIDevice currentDevice].userInterfaceIdiom == UIUserInterfaceIdiomPad)
+        if ([UIDevice currentDevice].userInterfaceIdiom == UIUserInterfaceIdiomPad) {
             [_popover dismissPopoverAnimated:_shouldAnimatePicker];
-        else
+            completion();
+        } else {
             [_navigationController dismissViewControllerAnimated:_shouldAnimatePicker  completion:completion];
+        }
     }
 
     [self cleanupViews];
@@ -259,7 +262,7 @@
             if (_onlyDrmSupported) {
                 supportedSerivces = @[@"None"];
             } else {
-                supportedSerivces = @[@"Chromecast"];
+                supportedSerivces = @[@"Chromecast", @"Chromecast, DIAL"];
             }
             NSPredicate *filter = [NSPredicate predicateWithFormat: @"connectedServiceNames IN %@", supportedSerivces];
             _generatedDeviceList = [[devices filteredArrayUsingPredicate: filter] sortedArrayUsingComparator:^NSComparisonResult(ConnectableDevice *device1, ConnectableDevice *device2) {
@@ -318,8 +321,20 @@
 {
     if (buttonIndex == actionSheet.cancelButtonIndex)
         return;
-    
-    ConnectableDevice *device = [_actionSheetDeviceList objectAtIndex:buttonIndex];
+
+    if (buttonIndex == 0) {
+        if (self.delegate && [self.delegate respondsToSelector:@selector(devicePickerDidSelectAirPlay)])
+        {
+            dispatch_async(dispatch_get_main_queue(), ^
+            {
+                [self.delegate devicePickerDidSelectAirPlay];
+            });
+        }
+
+        return;
+    }
+
+    ConnectableDevice *device = [_actionSheetDeviceList objectAtIndex:buttonIndex - 1];
     BOOL deviceExists = YES;
 
     @synchronized (_generatedDeviceList)
@@ -357,12 +372,24 @@
 - (void) tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath
 {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
+
+    if (indexPath.row == 0) {
+        [self dismissPicker:self  completion: ^{
+            if (_delegate && [_delegate respondsToSelector:@selector(devicePickerDidSelectAirPlay)])
+            {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    [_delegate devicePickerDidSelectAirPlay];
+                });
+            }
+        }];
+        return;
+    }
     
     ConnectableDevice *device;
 
     @synchronized (_generatedDeviceList)
     {
-        device = (ConnectableDevice *) [_generatedDeviceList objectAtIndex:indexPath.row];
+        device = (ConnectableDevice *) [_generatedDeviceList objectAtIndex:indexPath.row - 1];
     }
     
     if (self.currentDevice)
@@ -399,7 +426,7 @@
     @synchronized (_generatedDeviceList)
     {
         if (_generatedDeviceList)
-            numberOfRows = _generatedDeviceList.count;
+            numberOfRows = _generatedDeviceList.count + 1;
     }
 
     return numberOfRows;
@@ -415,12 +442,23 @@ static NSString *cellIdentifier = @"connectPickerCell";
     if (cell == nil)
         cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:cellIdentifier];
 
+
+    if (indexPath.row == 0) {
+        UIImage* image = [UIImage imageNamed: @"AirPlay"];
+        cell.imageView.image = [image imageWithRenderingMode: UIImageRenderingModeAlwaysTemplate];
+        [cell.imageView setTintColor: UIColor.labelColor];
+        [cell.textLabel setText: @"AirPlay Devices"];
+        [cell.detailTextLabel setText: @"AirPlay"];
+        [cell setAccessoryType:UITableViewCellAccessoryNone];
+        return cell;
+    }
+
     ConnectableDevice *device;
 
     @synchronized (_generatedDeviceList)
     {
-        if (_generatedDeviceList.count > 0 && indexPath.row < _generatedDeviceList.count)
-            device = (ConnectableDevice *) [_generatedDeviceList objectAtIndex:indexPath.row];
+        if (_generatedDeviceList.count > 0 && (indexPath.row - 1) < _generatedDeviceList.count)
+            device = (ConnectableDevice *) [_generatedDeviceList objectAtIndex: indexPath.row - 1];
     }
 
     if (!device)
@@ -428,6 +466,9 @@ static NSString *cellIdentifier = @"connectPickerCell";
 
     NSString *deviceName = [self nameForDevice:device];
     [cell.textLabel setText:deviceName];
+    UIImage *image = [UIImage imageNamed: @"Chromecast"];
+    cell.imageView.image = [image imageWithRenderingMode: UIImageRenderingModeAlwaysTemplate];
+    [cell.imageView setTintColor: UIColor.labelColor];
 
     #ifdef DEBUG
         [cell.detailTextLabel setText:[device connectedServiceNames]];
