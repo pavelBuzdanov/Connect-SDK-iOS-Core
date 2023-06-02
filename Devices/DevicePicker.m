@@ -395,6 +395,13 @@
     if (self.currentDevice)
     {
         if ([self.currentDevice.serviceDescription.address isEqualToString:device.serviceDescription.address]) {
+            if (_delegate && [_delegate respondsToSelector:@selector(devicePicker:userDisconnect:)])
+            {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    [_delegate devicePicker: self userDisconnect:device];
+                });
+            }
+
             [self.currentDevice disconnect];
             [self setCurrentDevice: nil];
             return;
