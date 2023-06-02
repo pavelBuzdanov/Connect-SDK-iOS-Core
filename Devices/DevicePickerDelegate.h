@@ -35,7 +35,6 @@
  * @param device ConnectableDevice that was selected by the user
  */
 - (void) devicePicker:(DevicePicker *)picker didSelectDevice:(ConnectableDevice *)device;
-- (void) devicePickerDidSelectAirPlay;
 
 @optional
 
@@ -46,5 +45,7 @@
  * @param error NSError with a description of the failure
  */
 - (void) devicePicker:(DevicePicker *)picker didCancelWithError:(NSError*)error;
+- (void) devicePicker:(DevicePicker *)picker userDisconnect:(ConnectableDevice *)device;
+- (void) devicePickerDidSelectAirPlay;
 
 @end
