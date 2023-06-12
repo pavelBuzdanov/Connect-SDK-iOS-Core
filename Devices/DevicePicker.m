@@ -182,14 +182,41 @@
     }
 }
 
+-(UIViewController *)rootViewController {
+    if (@available(iOS 13, *)) {
+        NSArray *scenes = [[[UIApplication sharedApplication] connectedScenes] allObjects];
+        for (UIWindowScene *scene in scenes) {
+            NSArray *windows = [scene windows];
+            for (UIWindow  *window in windows) {
+                if (window.isKeyWindow) {
+                    return window.rootViewController;
+                }
+            }
+        }
+
+        return nil;
+    } else {
+        return [UIApplication sharedApplication].keyWindow.rootViewController;
+    }
+
+}
+
+- (UIViewController *)topViewController {
+    UIViewController *topViewController = [self rootViewController];
+
+    while (topViewController.presentedViewController) {
+        topViewController = topViewController.presentedViewController;
+    }
+    return topViewController;
+}
+
 - (void) showNavigation
 {
     NSString *pickerCancel = [[NSBundle mainBundle] localizedStringForKey:@"Connect_SDK_Search_Cancel" value:@"Cancel" table:@"ConnectSDK"];
 
     _tableViewController.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithTitle:pickerCancel style:UIBarButtonItemStylePlain target:self action:@selector(dismissPicker:)];
     
-    UIWindow *mainWindow = [[UIApplication sharedApplication].windows firstObject];
-    [mainWindow.rootViewController presentViewController:_navigationController animated:self.shouldAnimatePicker completion:nil];
+    [[self topViewController] presentViewController:_navigationController animated:self.shouldAnimatePicker completion:nil];
 }
 
 - (void) dismissPicker:(id)sender
