@@ -38,6 +38,7 @@
 @property (nonatomic, weak) id<DevicePickerDelegate> delegate;
 
 @property (nonatomic) BOOL onlyDrmSupported;
+@property (nonatomic) BOOL isExternalPlaybackActive;
 
 /*!
  * When the showPicker method is called, it can animate onto the screen if this value is set to YES. This value will also be used to determine if the picker should animate when it is dismissed.
