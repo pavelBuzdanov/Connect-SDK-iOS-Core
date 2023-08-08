@@ -446,6 +446,34 @@
      }];
 }
 
+-(UIViewController *)rootViewController {
+    if (@available(iOS 13, *)) {
+        NSArray *scenes = [[[UIApplication sharedApplication] connectedScenes] allObjects];
+        for (UIWindowScene *scene in scenes) {
+            NSArray *windows = [scene windows];
+            for (UIWindow  *window in windows) {
+                if (window.isKeyWindow) {
+                    return window.rootViewController;
+                }
+            }
+        }
+
+        return nil;
+    } else {
+        return [UIApplication sharedApplication].keyWindow.rootViewController;
+    }
+
+}
+
+- (UIViewController *)topViewController {
+    UIViewController *topViewController = [self rootViewController];
+
+    while (topViewController.presentedViewController) {
+        topViewController = topViewController.presentedViewController;
+    }
+    return topViewController;
+}
+
 - (void)deviceService:(DeviceService *)service pairingRequiredOfType:(DeviceServicePairingType)pairingType withData:(id)pairingData
 {
     if (self.delegate)
@@ -454,8 +482,12 @@
             dispatch_on_main(^{ [self.delegate connectableDevice:self service:service pairingRequiredOfType:pairingType withData:pairingData]; });
         else
         {
-            // if (pairingType == DeviceServicePairingTypeAirPlayMirroring)
-               // [(UIAlertView *)pairingData show];
+            if (pairingType == DeviceServicePairingTypeAirPlayMirroring) {
+                UIAlertController* controller = (UIAlertController *) pairingData;
+                if (controller != nil) {
+                    [[self topViewController] presentViewController:controller animated:NO completion:nil];
+                }
+            }
         }
     }
 }

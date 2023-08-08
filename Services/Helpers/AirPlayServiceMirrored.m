@@ -124,14 +124,31 @@
             dispatch_on_main(^{ [self.service.delegate deviceService:self.service pairingRequiredOfType:DeviceServicePairingTypeAirPlayMirroring withData:_connectingAlertView]; });
         }
         
-        UIViewController *topViewController = [self topViewController];
-
-        [topViewController presentViewController:_connectingAlertView animated:YES completion:nil];
     }
 }
 
+-(UIViewController *)rootViewController {
+    if (@available(iOS 13, *)) {
+        NSArray *scenes = [[[UIApplication sharedApplication] connectedScenes] allObjects];
+        for (UIWindowScene *scene in scenes) {
+            NSArray *windows = [scene windows];
+            for (UIWindow  *window in windows) {
+                if (window.isKeyWindow) {
+                    return window.rootViewController;
+                }
+            }
+        }
+
+        return nil;
+    } else {
+        return [UIApplication sharedApplication].keyWindow.rootViewController;
+    }
+
+}
+
 - (UIViewController *)topViewController {
-    UIViewController *topViewController = [UIApplication sharedApplication].keyWindow.rootViewController;
+    UIViewController *topViewController = [self rootViewController];
+
     while (topViewController.presentedViewController) {
         topViewController = topViewController.presentedViewController;
     }

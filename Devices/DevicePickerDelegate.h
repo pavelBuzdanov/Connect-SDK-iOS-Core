@@ -45,5 +45,7 @@
  * @param error NSError with a description of the failure
  */
 - (void) devicePicker:(DevicePicker *)picker didCancelWithError:(NSError*)error;
+- (void) devicePicker:(DevicePicker *)picker userDisconnect:(ConnectableDevice *)device;
+- (void) devicePickerDidSelectAirPlay;
 
 @end

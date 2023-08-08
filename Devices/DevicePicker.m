@@ -39,7 +39,20 @@
 
     dispatch_queue_t _sortQueue;
 
+    BOOL _isExternalPlaybackActive;
     BOOL _showServiceLabel;
+}
+
+-(BOOL) isExternalPlaybackActive {
+    return _isExternalPlaybackActive;
+}
+
+-(void) setIsExternalPlaybackActive:(BOOL) isExternalPlaybackActive {
+    _isExternalPlaybackActive = isExternalPlaybackActive;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (_tableViewController)
+            [_tableViewController.tableView reloadData];
+    });
 }
 
 - (instancetype) init
@@ -52,6 +65,8 @@
         _devices = [[NSMutableDictionary alloc] init];
 
         self.shouldAnimatePicker = YES;
+        self.onlyDrmSupported = NO;
+        self.isExternalPlaybackActive = NO;
     }
 
     return self;
@@ -154,9 +169,10 @@
         _actionSheetDeviceList = [_generatedDeviceList copy];
     }
 
+    [_actionSheet addButtonWithTitle: @"AirPlay"];
     [_actionSheetDeviceList enumerateObjectsUsingBlock:^(ConnectableDevice *device, NSUInteger idx, BOOL *stop)
     {
-        [_actionSheet addButtonWithTitle:device.friendlyName];
+        [_actionSheet addButtonWithTitle: device.friendlyName];
     }];
     
     _actionSheet.cancelButtonIndex = [_actionSheet addButtonWithTitle:pickerCancel];
@@ -180,27 +196,61 @@
     }
 }
 
+-(UIViewController *)rootViewController {
+    if (@available(iOS 13, *)) {
+        NSArray *scenes = [[[UIApplication sharedApplication] connectedScenes] allObjects];
+        for (UIWindowScene *scene in scenes) {
+            NSArray *windows = [scene windows];
+            for (UIWindow  *window in windows) {
+                if (window.isKeyWindow) {
+                    return window.rootViewController;
+                }
+            }
+        }
+
+        return nil;
+    } else {
+        return [UIApplication sharedApplication].keyWindow.rootViewController;
+    }
+
+}
+
+- (UIViewController *)topViewController {
+    UIViewController *topViewController = [self rootViewController];
+
+    while (topViewController.presentedViewController) {
+        topViewController = topViewController.presentedViewController;
+    }
+    return topViewController;
+}
+
 - (void) showNavigation
 {
     NSString *pickerCancel = [[NSBundle mainBundle] localizedStringForKey:@"Connect_SDK_Search_Cancel" value:@"Cancel" table:@"ConnectSDK"];
 
     _tableViewController.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithTitle:pickerCancel style:UIBarButtonItemStylePlain target:self action:@selector(dismissPicker:)];
     
-    UIWindow *mainWindow = [[UIApplication sharedApplication].windows firstObject];
-    [mainWindow.rootViewController presentViewController:_navigationController animated:self.shouldAnimatePicker completion:nil];
+    [[self topViewController] presentViewController:_navigationController animated:self.shouldAnimatePicker completion:nil];
 }
 
 - (void) dismissPicker:(id)sender
+{
+    [self dismissPicker:nil completion:nil];
+}
+
+- (void) dismissPicker:(id)sender completion: (void (^ __nullable)(void))completion
 {
     if (_actionSheet)
     {
         [_actionSheet dismissWithClickedButtonIndex:_actionSheet.cancelButtonIndex animated:YES];
     } else
     {
-        if ([UIDevice currentDevice].userInterfaceIdiom == UIUserInterfaceIdiomPad)
+        if ([UIDevice currentDevice].userInterfaceIdiom == UIUserInterfaceIdiomPad) {
             [_popover dismissPopoverAnimated:_shouldAnimatePicker];
-        else
-            [_navigationController dismissViewControllerAnimated:_shouldAnimatePicker completion:nil];
+            completion();
+        } else {
+            [_navigationController dismissViewControllerAnimated:_shouldAnimatePicker  completion:completion];
+        }
     }
 
     [self cleanupViews];
@@ -249,7 +299,14 @@
 
         @synchronized (_generatedDeviceList)
         {
-            _generatedDeviceList = [devices sortedArrayUsingComparator:^NSComparisonResult(ConnectableDevice *device1, ConnectableDevice *device2) {
+                    NSArray <NSString *> *supportedSerivces;
+            if (_onlyDrmSupported) {
+                supportedSerivces = @[@"None"];
+            } else {
+                supportedSerivces = @[@"Chromecast", @"Chromecast, DIAL"];
+            }
+            NSPredicate *filter = [NSPredicate predicateWithFormat: @"connectedServiceNames IN %@", supportedSerivces];
+            _generatedDeviceList = [[devices filteredArrayUsingPredicate: filter] sortedArrayUsingComparator:^NSComparisonResult(ConnectableDevice *device1, ConnectableDevice *device2) {
                 NSString *device1Name = [[self nameForDevice:device1] lowercaseString];
                 NSString *device2Name = [[self nameForDevice:device2] lowercaseString];
 
@@ -305,8 +362,20 @@
 {
     if (buttonIndex == actionSheet.cancelButtonIndex)
         return;
-    
-    ConnectableDevice *device = [_actionSheetDeviceList objectAtIndex:buttonIndex];
+
+    if (buttonIndex == 0) {
+        if (self.delegate && [self.delegate respondsToSelector:@selector(devicePickerDidSelectAirPlay)])
+        {
+            dispatch_async(dispatch_get_main_queue(), ^
+            {
+                [self.delegate devicePickerDidSelectAirPlay];
+            });
+        }
+
+        return;
+    }
+
+    ConnectableDevice *device = [_actionSheetDeviceList objectAtIndex:buttonIndex - 1];
     BOOL deviceExists = YES;
 
     @synchronized (_generatedDeviceList)
@@ -336,36 +405,125 @@
 
 - (void)actionSheetCancel:(UIActionSheet *)actionSheet
 {
-    [self dismissPicker:nil];
+    [self dismissPicker:nil completion:nil];
 }
 
 #pragma mark UITableViewDelegate methods
 
+-(void) disconnectDevice: (ConnectableDevice *) device {
+    if (_delegate && [_delegate respondsToSelector:@selector(devicePicker:userDisconnect:)])
+    {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [_delegate devicePicker: self userDisconnect:device];
+        });
+    }
+
+    [self.currentDevice disconnect];
+    [self setCurrentDevice: nil];
+}
+
+-(void) showAlertForDisconnectDevice: (ConnectableDevice *) device {
+    NSString *disconnectingAlertViewTitle = device.serviceDescription.friendlyName;
+    NSString *disconnectingAlertViewMessage = [[NSBundle mainBundle] localizedStringForKey:@"Connect_SDK_DevicePicker_Disconnect_Description" value:@"Do you want to disconnect from the device?" table:@"ConnectSDK"];
+    NSString *disconnectingAlertViewOk = [[NSBundle mainBundle] localizedStringForKey:@"Connect_SDK_DevicePicker_Disconnect_OK" value:@"YES" table:@"ConnectSDK"];
+    NSString *disconnectingAlertViewCancel = [[NSBundle mainBundle] localizedStringForKey:@"Connect_SDK_DevicePicker_Disconnect_Cancel" value:@"NO" table:@"ConnectSDK"];
+
+    UIAlertController *disconnectingAlertView = [UIAlertController alertControllerWithTitle:disconnectingAlertViewTitle message:disconnectingAlertViewMessage preferredStyle:UIAlertControllerStyleAlert];
+
+    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:disconnectingAlertViewCancel style:UIAlertActionStyleCancel handler:^(UIAlertAction *action) { }];
+
+    UIAlertAction *okAction = [UIAlertAction actionWithTitle:disconnectingAlertViewOk style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+        [self disconnectDevice: device];
+    }];
+
+    [disconnectingAlertView addAction:cancelAction];
+    [disconnectingAlertView addAction:okAction];
+
+    dispatch_on_main(^{
+        [[self topViewController] presentViewController: disconnectingAlertView animated: YES completion: nil];
+    });
+}
+
+-(void) showAlertForDisconnectAirplayDeviceWithTitle: (NSString *)disconnectingAlertViewTitle {
+    NSString *disconnectingAlertViewMessage = [[NSBundle mainBundle] localizedStringForKey:@"Connect_SDK_DevicePicker_Disconnect_Description" value:@"Do you want to disconnect from the device?" table:@"ConnectSDK"];
+    NSString *disconnectingAlertViewOk = [[NSBundle mainBundle] localizedStringForKey:@"Connect_SDK_DevicePicker_Disconnect_OK" value:@"YES" table:@"ConnectSDK"];
+    NSString *disconnectingAlertViewCancel = [[NSBundle mainBundle] localizedStringForKey:@"Connect_SDK_DevicePicker_Disconnect_Cancel" value:@"NO" table:@"ConnectSDK"];
+
+    UIAlertController *disconnectingAlertView = [UIAlertController alertControllerWithTitle:disconnectingAlertViewTitle message:disconnectingAlertViewMessage preferredStyle:UIAlertControllerStyleAlert];
+
+    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:disconnectingAlertViewCancel style:UIAlertActionStyleCancel handler:^(UIAlertAction *action) { }];
+
+    UIAlertAction *okAction = [UIAlertAction actionWithTitle:disconnectingAlertViewOk style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+        if (_delegate && [_delegate respondsToSelector:@selector(devicePickerDidSelectAirPlay)])
+        {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [_delegate devicePickerDidSelectAirPlay];
+            });
+        }
+    }];
+
+    [disconnectingAlertView addAction:cancelAction];
+    [disconnectingAlertView addAction:okAction];
+
+    dispatch_on_main(^{
+        [[self topViewController] presentViewController: disconnectingAlertView animated: YES completion: nil];
+    });
+}
+
 - (void) tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath
 {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
+
+    if (indexPath.row == 0) {
+        if (self.currentDevice) {
+            [self showAlertForDisconnectDevice: self.currentDevice];
+        } else if (self.isExternalPlaybackActive) {
+            [self showAlertForDisconnectAirplayDeviceWithTitle: @"AirPlay Device"];
+        } else {
+            [self dismissPicker:self  completion: ^{
+                if (_delegate && [_delegate respondsToSelector:@selector(devicePickerDidSelectAirPlay)])
+                {
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        [_delegate devicePickerDidSelectAirPlay];
+                    });
+                }
+            }];
+        }
+        return;
+    }
+
+    if (self.isExternalPlaybackActive) {
+        NSString *disconnectingAlertViewTitle = [[NSBundle mainBundle] localizedStringForKey:@"Connect_SDK_DevicePicker_Disconnect_Title" value:@"You are already connected to %@" table:@"ConnectSDK"];
+        NSString *airplayDeviceTitle = @"AirPlay Device";
+        [self showAlertForDisconnectAirplayDeviceWithTitle: [NSString stringWithFormat: disconnectingAlertViewTitle, airplayDeviceTitle]];
+        return;
+    }
     
     ConnectableDevice *device;
 
     @synchronized (_generatedDeviceList)
     {
-        device = (ConnectableDevice *) [_generatedDeviceList objectAtIndex:indexPath.row];
+        device = (ConnectableDevice *) [_generatedDeviceList objectAtIndex:indexPath.row - 1];
     }
     
     if (self.currentDevice)
     {
-        if ([self.currentDevice.serviceDescription.address isEqualToString:device.serviceDescription.address])
+        if ([self.currentDevice.serviceDescription.address isEqualToString: device.serviceDescription.address]) {
+            // вызвать диалог дисконнекта
+            [self showAlertForDisconnectDevice: device];
             return;
+        }
     }
     
-    if (_delegate && [_delegate respondsToSelector:@selector(devicePicker:didSelectDevice:)])
-    {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            [_delegate devicePicker:self didSelectDevice:device];
-        });
-    }
+    [self dismissPicker:self  completion: ^{
+        if (_delegate && [_delegate respondsToSelector:@selector(devicePicker:didSelectDevice:)])
+        {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [_delegate devicePicker:self didSelectDevice:device];
+            });
+        }
+    }];
 
-    [self dismissPicker:self];
 }
 
 #pragma mark UITableViewDataSource methods
@@ -382,7 +540,7 @@
     @synchronized (_generatedDeviceList)
     {
         if (_generatedDeviceList)
-            numberOfRows = _generatedDeviceList.count;
+            numberOfRows = _generatedDeviceList.count + 1;
     }
 
     return numberOfRows;
@@ -398,12 +556,29 @@ static NSString *cellIdentifier = @"connectPickerCell";
     if (cell == nil)
         cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:cellIdentifier];
 
+
+    if (indexPath.row == 0) {
+        UIImage* image = [UIImage imageNamed: @"AirPlay"];
+        cell.imageView.image = [image imageWithRenderingMode: UIImageRenderingModeAlwaysTemplate];
+        [cell.imageView setTintColor: UIColor.labelColor];
+        [cell.textLabel setText: @"AirPlay Devices"];
+        [cell.detailTextLabel setText: @"AirPlay"];
+        if (self.isExternalPlaybackActive) {
+            [cell setAccessoryType:UITableViewCellAccessoryCheckmark];
+        } else {
+            [cell setAccessoryType:UITableViewCellAccessoryNone];
+        }
+
+        return cell;
+    }
+
+
     ConnectableDevice *device;
 
     @synchronized (_generatedDeviceList)
     {
-        if (_generatedDeviceList.count > 0 && indexPath.row < _generatedDeviceList.count)
-            device = (ConnectableDevice *) [_generatedDeviceList objectAtIndex:indexPath.row];
+        if (_generatedDeviceList.count > 0 && (indexPath.row - 1) < _generatedDeviceList.count)
+            device = (ConnectableDevice *) [_generatedDeviceList objectAtIndex: indexPath.row - 1];
     }
 
     if (!device)
@@ -411,6 +586,9 @@ static NSString *cellIdentifier = @"connectPickerCell";
 
     NSString *deviceName = [self nameForDevice:device];
     [cell.textLabel setText:deviceName];
+    UIImage *image = [UIImage imageNamed: @"Chromecast"];
+    cell.imageView.image = [image imageWithRenderingMode: UIImageRenderingModeAlwaysTemplate];
+    [cell.imageView setTintColor: UIColor.labelColor];
 
     #ifdef DEBUG
         [cell.detailTextLabel setText:[device connectedServiceNames]];
@@ -425,6 +603,8 @@ static NSString *cellIdentifier = @"connectPickerCell";
                 [cell setAccessoryType:UITableViewCellAccessoryCheckmark];
             else
                 [cell setAccessoryType:UITableViewCellAccessoryNone];
+        } else {
+            [cell setAccessoryType:UITableViewCellAccessoryNone];
         }
 
     return cell;
